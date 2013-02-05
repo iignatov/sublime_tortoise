@@ -461,48 +461,36 @@ class TortoiseHg(Tortoise):
                     'TortoiseHg v1.x)', 'hg_hgtk_path')
 
     def status(self, path=None):
-        path = os.path.relpath(path, self.root_dir)
-        args = [self.path, 'status', '--nofork', path]
-        ForkGui(args, self.root_dir)
+        self.run_command('status', path)
 
     def commit(self, path=None):
-        path = os.path.relpath(path, self.root_dir)
-        args = [self.path, 'commit', '--nofork', path]
-        ForkGui(args, self.root_dir)
+        self.run_command('commit', path)
 
     def sync(self, path=None):
-        path = os.path.relpath(path, self.root_dir)
-        args = [self.path, 'synch', '--nofork', path]
-        ForkGui(args, self.root_dir)
+        self.run_command('synch', path)
 
     def log(self, path=None):
-        path = os.path.relpath(path, self.root_dir)
-        args = [self.path, 'log', '--nofork', path]
-        ForkGui(args, self.root_dir)
+        self.run_command('log', path)
 
     def blame(self, path=None):
-        path = os.path.relpath(path, self.root_dir)
-        args = [self.path, 'blame', '--nofork', path]
-        ForkGui(args, self.root_dir)
+        self.run_command('blame', path)
 
     def diff(self, path):
-        path = os.path.relpath(path, self.root_dir)
-        args = [self.path, 'vdiff', '--nofork', path]
-        ForkGui(args, self.root_dir)
+        self.run_command('vdiff', path)
 
     def add(self, path):
-        path = os.path.relpath(path, self.root_dir)
-        args = [self.path, 'add', '--nofork', path]
-        ForkGui(args, self.root_dir)
+        self.run_command('add', path)
 
     def remove(self, path):
-        path = os.path.relpath(path, self.root_dir)
-        args = [self.path, 'remove', '--nofork', path]
-        ForkGui(args, self.root_dir)
+        self.run_command('remove', path)
 
     def revert(self, path):
+        self.run_command('revert', path)
+        
+    def run_command(self, name, path):
+        path = self.root_dir if path == None else path
         path = os.path.relpath(path, self.root_dir)
-        args = [self.path, 'revert', '--nofork', path]
+        args = [self.path, name, '--nofork', path]
         ForkGui(args, self.root_dir)
 
     def get_status(self, path):
