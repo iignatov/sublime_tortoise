@@ -335,11 +335,11 @@ class TortoiseBase():
         vcs = self.new_vcs()
         settings = sublime.load_settings('Tortoise.sublime-settings')
 
-        if path in file_status_cache and file_status_cache[path]['time'] > \
-                time.time() - settings.get('cache_length'):
-            if settings.get('debug'):
-                print 'Fetching cached status for %s' % path
-            return file_status_cache[path]['status']
+        if path in file_status_cache:
+            if file_status_cache[path]['time'] > time.time():
+                if settings.get('debug'):
+                    print 'Fetching cached status for %s' % path
+                return file_status_cache[path]['status']
 
         if settings.get('debug'):
             start_time = time.time()
