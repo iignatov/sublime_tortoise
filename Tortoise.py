@@ -46,8 +46,9 @@ class TortoiseCommand():
             pass
 
         if vcs == None:
-            raise NotFoundError('The current file does not appear to be in an ' +
-                'SVN, Git or Mercurial working copy')
+            raise NotFoundError(
+                'The current file does not appear to be ' +
+                'in a SVN, Git or Mercurial working copy.')
 
         return vcs
 
@@ -280,7 +281,7 @@ class ForkGui():
             cwd=cwd)
 
 
-class Tortoise():
+class TortoiseBase():
     def find_root(self, name, path, find_first=True):
         root_dir = None
         last_dir = None
@@ -297,11 +298,11 @@ class Tortoise():
             cur_dir  = os.path.dirname(cur_dir)
 
         if root_dir == None:
-            raise RepositoryNotFoundError('Unable to find ' + name +
-                ' directory')
+            raise RepositoryNotFoundError(
+                'Unable to find ' + name + ' directory')
         self.root_dir = root_dir
 
-    def set_binary_path(self, path_suffix, binary_name, setting_name):
+    def find_binary(self, path_suffix, binary_name):
         root_drive = os.path.expandvars('%HOMEDRIVE%\\')
 
         possible_dirs = [
@@ -312,28 +313,28 @@ class Tortoise():
         for dir in possible_dirs:
             path = root_drive + dir + path_suffix
             if os.path.exists(path):
-                self.path = path
-                return
+                return path
+        return None
 
-        self.path = None
-        normal_path = root_drive + possible_dirs[0] + path_suffix
-        raise NotFoundError('Unable to find ' + self.__class__.__name__ +
-                            '.\n\nPlease add the path to ' + binary_name +
-                            ' to the setting "' + setting_name + '" in "' +
-                            sublime.packages_path() +
-                            '\\Tortoise\\Tortoise.sublime-settings".\n\n' +
-                            'Example:\n\n' + '{"' + setting_name + '": r"' +
-                            normal_path + '"}')
+    def set_binary_path(self, path_suffix, binary_name, setting_name):
+        self.path = self.find_binary(path_suffix, binary_name)
+        if self.path != None:
+            return
+        root_drive = os.path.expandvars('%HOMEDRIVE%\\')
+        normal_path = root_drive + 'Program Files\\' + path_suffix
+        raise NotFoundError(
+            'Unable to find ' + self.__class__.__name__ + '.\n\n' +
+            'Please add the path to ' + binary_name + ' to the setting ' +
+            '"' + setting_name + '" in "' + sublime.packages_path() +
+            '\\Tortoise\\Tortoise.sublime-settings".\n\nExample:\n\n' +
+            '{"' + setting_name + '": r"' + normal_path + '"}')
 
-    def explore(self, path=None):
-        if path == None:
-            ForkGui('explorer.exe "' + self.root_dir + '"', None)
-        else:
-            ForkGui('explorer.exe "' + os.path.dirname(path) + '"', None)
-
-    def process_status(self, vcs, path):
+    def get_status(self, path):
         global file_status_cache
+        status = ''
+        vcs = self.new_vcs()
         settings = sublime.load_settings('Tortoise.sublime-settings')
+
         if path in file_status_cache and file_status_cache[path]['time'] > \
                 time.time() - settings.get('cache_length'):
             if settings.get('debug'):
@@ -354,18 +355,37 @@ class Tortoise():
         }
 
         if settings.get('debug'):
-            print 'Fetching status for %s in %s seconds' % (path,
-                str(time.time() - start_time))
+            print 'Fetching status for %s in %s seconds' % \
+                (path, str(time.time() - start_time))
 
         return status
 
+    def map_command(self, name):
+        mappings = self.get_mappings()
+        if name in mappings:
+            return mappings[name]
+        return name
 
-class TortoiseProc(Tortoise):
+    def run_command(self, name, path):
+        name = self.map_command(name)
+        path = self.root_dir if path == None else path
+        path = os.path.relpath(path, self.root_dir)
+        args = self.get_arguments(name, path)
+        ForkGui(args, self.root_dir)
+
+    def explore(self, path=None):
+        path = self.root_dir if path == None else os.path.dirname(path)
+        args = 'explorer.exe "%s"' % path
+        ForkGui(args, None)
+
     def status(self, path=None):
-        self.run_command('repostatus', path)
+        self.run_command('status', path)
 
     def commit(self, path=None):
         self.run_command('commit', path)
+
+    def sync(self, path=None):
+        self.run_command('sync', path)
 
     def log(self, path=None):
         self.run_command('log', path)
@@ -385,103 +405,83 @@ class TortoiseProc(Tortoise):
     def revert(self, path):
         self.run_command('revert', path)
 
-    def run_command(self, name, path):
-        path = self.root_dir if path == None else path
-        path = os.path.relpath(path, self.root_dir)
-        args = '"%s" /command:%s /path:"%s"' % (self.path, name, path)
-        ForkGui(args, self.root_dir)
 
-
-class TortoiseSVN(TortoiseProc):
+class TortoiseSVN(TortoiseBase):
     def __init__(self, binary_path, file):
         self.find_root('.svn', file, False)
         if binary_path != None:
             self.path = binary_path
         else:
-            self.set_binary_path('TortoiseSVN\\bin\\TortoiseProc.exe',
-                'TortoiseProc.exe', 'svn_tortoiseproc_path')
+            self.set_binary_path(
+                'TortoiseSVN\\bin\\TortoiseProc.exe',
+                'TortoiseProc.exe',
+                'svn_tortoiseproc_path')
 
-    def sync(self, path=None):
-        path = self.root_dir if path == None else path
-        path = os.path.relpath(path, self.root_dir)
-        ForkGui('"' + self.path + '" /command:update /path:"%s"' % path,
-            self.root_dir)
+    def new_vcs(self):
+        return SVN(self.root_dir)
 
-    def get_status(self, path):
-        svn = SVN(self.root_dir)
-        return self.process_status(svn, path)
+    def get_mappings(self):
+        return {
+            'status': 'repostatus',
+            'sync': 'update'
+        }
+
+    def get_arguments(self, name, path):
+        return '"%s" /command:%s /path:"%s"' % (self.path, name, path)
 
 
-class TortoiseGit(TortoiseProc):
+class TortoiseGit(TortoiseBase):
     def __init__(self, binary_path, file):
         self.find_root('.git', file)
         if binary_path != None:
             self.path = binary_path
         else:
-            self.set_binary_path('TortoiseGit\\bin\\TortoiseProc.exe',
-                'TortoiseProc.exe', 'git_tortoiseproc_path')
+            self.set_binary_path(
+                'TortoiseGit\\bin\\TortoiseProc.exe',
+                'TortoiseProc.exe',
+                'git_tortoiseproc_path')
 
-    def sync(self, path=None):
-        path = self.root_dir if path == None else path
-        path = os.path.relpath(path, self.root_dir)
-        ForkGui('"' + self.path + '" /command:sync /path:"%s"' % path,
-            self.root_dir)
+    def new_vcs(self):
+        return Git(self.path, self.root_dir)
 
-    def get_status(self, path):
-        git = Git(self.path, self.root_dir)
-        return self.process_status(git, path)
+    def get_mappings(self):
+        return {
+            'status': 'repostatus'
+        }
+
+    def get_arguments(self, name, path):
+        return '"%s" /command:%s /path:"%s"' % (self.path, name, path)
 
 
-class TortoiseHg(Tortoise):
+class TortoiseHg(TortoiseBase):
     def __init__(self, binary_path, file):
         self.find_root('.hg', file)
         if binary_path != None:
             self.path = binary_path
         else:
             try:
-                self.set_binary_path('TortoiseHg\\thgw.exe',
-                    'thgw.exe', 'hg_hgtk_path')
+                self.set_binary_path(
+                    'TortoiseHg\\thgw.exe',
+                    'thgw.exe',
+                    'hg_hgtk_path')
             except (NotFoundError):
-                self.set_binary_path('TortoiseHg\\hgtk.exe',
-                    'thgw.exe (for TortoiseHg v2.x) or hgtk.exe (for ' +
-                    'TortoiseHg v1.x)', 'hg_hgtk_path')
+                self.set_binary_path(
+                    'TortoiseHg\\hgtk.exe',
+                    'thgw.exe (for TortoiseHg v2.x) or ' +
+                    'hgtk.exe (for TortoiseHg v1.x)',
+                    'hg_hgtk_path')
 
-    def status(self, path=None):
-        self.run_command('status', path)
+    def new_vcs(self):
+        return Hg(self.path, self.root_dir)
 
-    def commit(self, path=None):
-        self.run_command('commit', path)
+    def get_mappings(self):
+        return {
+            'sync': 'synch',
+            'diff': 'vdiff'
+        }
 
-    def sync(self, path=None):
-        self.run_command('synch', path)
-
-    def log(self, path=None):
-        self.run_command('log', path)
-
-    def blame(self, path=None):
-        self.run_command('blame', path)
-
-    def diff(self, path):
-        self.run_command('vdiff', path)
-
-    def add(self, path):
-        self.run_command('add', path)
-
-    def remove(self, path):
-        self.run_command('remove', path)
-
-    def revert(self, path):
-        self.run_command('revert', path)
-        
-    def run_command(self, name, path):
-        path = self.root_dir if path == None else path
-        path = os.path.relpath(path, self.root_dir)
-        args = [self.path, name, '--nofork', path]
-        ForkGui(args, self.root_dir)
-
-    def get_status(self, path):
-        hg = Hg(self.path, self.root_dir)
-        return self.process_status(hg, path)
+    def get_arguments(self, name, path):
+        return [self.path, name, '--nofork', path]
 
 
 class NonInteractiveProcess():
