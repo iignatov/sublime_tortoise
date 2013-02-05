@@ -362,48 +362,34 @@ class Tortoise():
 
 class TortoiseProc(Tortoise):
     def status(self, path=None):
-        path = self.root_dir if path == None else path
-        path = os.path.relpath(path, self.root_dir)
-        ForkGui('"' + self.path + '" /command:repostatus /path:"%s"' % path,
-            self.root_dir)
+        self.run_command('repostatus', path)
 
     def commit(self, path=None):
-        path = self.root_dir if path == None else path
-        path = os.path.relpath(path, self.root_dir)
-        ForkGui('"' + self.path + '" /command:commit /path:"%s"' % path,
-            self.root_dir)
+        self.run_command('commit', path)
 
     def log(self, path=None):
-        path = self.root_dir if path == None else path
-        path = os.path.relpath(path, self.root_dir)
-        ForkGui('"' + self.path + '" /command:log /path:"%s"' % path,
-            self.root_dir)
+        self.run_command('log', path)
 
     def blame(self, path=None):
-        path = self.root_dir if path == None else path
-        path = os.path.relpath(path, self.root_dir)
-        ForkGui('"' + self.path + '" /command:blame /path:"%s"' % path,
-            self.root_dir)
+        self.run_command('blame', path)
 
     def diff(self, path):
-        path = os.path.relpath(path, self.root_dir)
-        ForkGui('"' + self.path + '" /command:diff /path:"%s"' % path,
-            self.root_dir)
+        self.run_command('diff', path)
 
     def add(self, path):
-        path = os.path.relpath(path, self.root_dir)
-        ForkGui('"' + self.path + '" /command:add /path:"%s"' % path,
-            self.root_dir)
+        self.run_command('add', path)
 
     def remove(self, path):
-        path = os.path.relpath(path, self.root_dir)
-        ForkGui('"' + self.path + '" /command:remove /path:"%s"' % path,
-            self.root_dir)
+        self.run_command('remove', path)
 
     def revert(self, path):
+        self.run_command('revert', path)
+
+    def run_command(self, name, path):
+        path = self.root_dir if path == None else path
         path = os.path.relpath(path, self.root_dir)
-        ForkGui('"' + self.path + '" /command:revert /path:"%s"' % path,
-            self.root_dir)
+        args = '"%s" /command:%s /path:"%s"' % (self.path, name, path)
+        ForkGui(args, self.root_dir)
 
 
 class TortoiseSVN(TortoiseProc):
