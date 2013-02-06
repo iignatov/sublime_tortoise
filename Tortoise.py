@@ -495,23 +495,31 @@ class NonInteractiveProcess():
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
-        proc = subprocess.Popen(self.args, stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            startupinfo=startupinfo, cwd=self.cwd)
+        proc = subprocess.Popen(
+            self.args,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            startupinfo=startupinfo,
+            cwd=self.cwd)
 
         return proc.stdout.read().replace('\r\n', '\n').rstrip(' \n\r')
 
 
-class SVN():
+class VCS():
+    def run_niprocess(self, args):
+        return NonInteractiveProcess(args, cwd=self.root_dir).run()
+
+
+class SVN(VCS):
     def __init__(self, root_dir):
         self.root_dir = root_dir
 
     def check_status(self, path):
-        svn_path = os.path.join(sublime.packages_path(), __name__, 'svn',
-            'svn.exe')
-        proc = NonInteractiveProcess([svn_path, 'status', path],
-            cwd=self.root_dir)
-        result = proc.run().split('\n')
+        stp_path = sublime.packages_path()
+        svn_path = os.path.join(stp_path, __name__, 'svn', 'svn.exe')
+        args = [svn_path, 'status', path]
+        result = self.run_niprocess(args).split('\n')
         for line in result:
             if len(line) < 1:
                 continue
@@ -525,23 +533,25 @@ class SVN():
         return ''
 
 
-class Git():
+class Git(VCS):
     def __init__(self, tortoise_proc_path, root_dir):
-        self.git_path = os.path.dirname(tortoise_proc_path) + '\\tgit.exe'
         self.root_dir = root_dir
+        self.git_path = os.path.dirname(tortoise_proc_path) + '\\tgit.exe'
 
     def check_status(self, path):
         if os.path.isdir(path):
-            proc = NonInteractiveProcess([self.git_path, 'log', '-1', path],
-                cwd=self.root_dir)
-            result = proc.run().strip().split('\n')
-            if result == ['']:
-                return '?'
-            return ''
+            return self.check_status_dir(path)
+        else:
+            return self.check_status_file(path)
 
-        proc = NonInteractiveProcess([self.git_path, 'status', '--short'],
-            cwd=self.root_dir)
-        result = proc.run().strip().split('\n')
+    def check_status_dir(self, path):
+        args = [self.git_path, 'log', '-1', path]
+        result = self.run_niprocess(args).strip().split('\n')
+        return ('?' if result == [''] else '')
+
+    def check_status_file(self, path):
+        args = [self.git_path, 'status', '--short']
+        result = self.run_niprocess(args).strip().split('\n')
         for line in result:
             if len(line) < 2:
                 continue
@@ -550,31 +560,29 @@ class Git():
             if self.root_dir != path and re.search(path_regex, line) == None:
                 continue
 
-            if line[0] != ' ':
-                res = line[0]
-            else:
-                res = line[1]
-            return res.upper()
+            return (line[0] if line[0] != ' ' else line[1]).upper()
         return ''
 
 
-class Hg():
+class Hg(VCS):
     def __init__(self, tortoise_proc_path, root_dir):
-        self.hg_path = os.path.dirname(tortoise_proc_path) + '\\hg.exe'
         self.root_dir = root_dir
+        self.hg_path = os.path.dirname(tortoise_proc_path) + '\\hg.exe'
 
     def check_status(self, path):
         if os.path.isdir(path):
-            proc = NonInteractiveProcess([self.hg_path, 'log', '-l', '1',
-                '"' + path + '"'], cwd=self.root_dir)
-            result = proc.run().strip().split('\n')
-            if result == ['']:
-                return '?'
-            return ''
+            return self.check_status_dir(path)
+        else:
+            return self.check_status_file(path)
 
-        proc = NonInteractiveProcess([self.hg_path, 'status', path],
-            cwd=self.root_dir)
-        result = proc.run().split('\n')
+    def check_status_dir(self, path):
+        args = [self.hg_path, 'log', '-l', '1', '"' + path + '"']
+        result = self.run_niprocess(args).strip().split('\n')
+        return ('?' if result == [''] else '')
+
+    def check_status_file(self, path):
+        args = [self.hg_path, 'status', path]
+        result = self.run_niprocess(args).split('\n')
         for line in result:
             if len(line) < 1:
                 continue
