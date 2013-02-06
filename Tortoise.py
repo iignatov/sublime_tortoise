@@ -282,57 +282,9 @@ class ForkGui():
 
 
 class TortoiseBase():
-    def find_root(self, name, path, find_first=True):
-        root_dir = None
-        last_dir = None
-        cur_dir  = path if os.path.isdir(path) else os.path.dirname(path)
-        while cur_dir != last_dir:
-            if root_dir != None and not os.path.exists(os.path.join(cur_dir,
-                    name)):
-                break
-            if os.path.exists(os.path.join(cur_dir, name)):
-                root_dir = cur_dir
-                if find_first:
-                    break
-            last_dir = cur_dir
-            cur_dir  = os.path.dirname(cur_dir)
-
-        if root_dir == None:
-            raise RepositoryNotFoundError(
-                'Unable to find ' + name + ' directory')
-        self.root_dir = root_dir
-
-    def find_binary(self, path_suffix, binary_name):
-        root_drive = os.path.expandvars('%HOMEDRIVE%\\')
-
-        possible_dirs = [
-            'Program Files\\',
-            'Program Files (x86)\\'
-        ]
-
-        for dir in possible_dirs:
-            path = root_drive + dir + path_suffix
-            if os.path.exists(path):
-                return path
-        return None
-
-    def set_binary_path(self, path_suffix, binary_name, setting_name):
-        self.path = self.find_binary(path_suffix, binary_name)
-        if self.path != None:
-            return
-        root_drive = os.path.expandvars('%HOMEDRIVE%\\')
-        normal_path = root_drive + 'Program Files\\' + path_suffix
-        raise NotFoundError(
-            'Unable to find ' + self.__class__.__name__ + '.\n\n' +
-            'Please add the path to ' + binary_name + ' to the setting ' +
-            '"' + setting_name + '" in "' + sublime.packages_path() +
-            '\\Tortoise\\Tortoise.sublime-settings".\n\nExample:\n\n' +
-            '{"' + setting_name + '": r"' + normal_path + '"}')
-
     def get_status(self, path):
         global file_status_cache
         status = ''
-        vcs = self.new_vcs()
         settings = sublime.load_settings('Tortoise.sublime-settings')
 
         if path in file_status_cache:
@@ -345,7 +297,7 @@ class TortoiseBase():
             start_time = time.time()
 
         try:
-            status = vcs.check_status(path)
+            status = self.new_vcs().check_status(path)
         except (Exception) as (exception):
             sublime.error_message(str(exception))
 
@@ -408,11 +360,12 @@ class TortoiseBase():
 
 class TortoiseSVN(TortoiseBase):
     def __init__(self, binary_path, file):
-        self.find_root('.svn', file, False)
+        self.root_dir = Util.find_root('.svn', file, False)
         if binary_path != None:
             self.path = binary_path
         else:
-            self.set_binary_path(
+            self.path = Util.find_binary(
+                self.__class__.__name__,
                 'TortoiseSVN\\bin\\TortoiseProc.exe',
                 'TortoiseProc.exe',
                 'svn_tortoiseproc_path')
@@ -432,11 +385,12 @@ class TortoiseSVN(TortoiseBase):
 
 class TortoiseGit(TortoiseBase):
     def __init__(self, binary_path, file):
-        self.find_root('.git', file)
+        self.root_dir = Util.find_root('.git', file)
         if binary_path != None:
             self.path = binary_path
         else:
-            self.set_binary_path(
+            self.path = Util.find_binary(
+                self.__class__.__name__,
                 'TortoiseGit\\bin\\TortoiseProc.exe',
                 'TortoiseProc.exe',
                 'git_tortoiseproc_path')
@@ -455,17 +409,19 @@ class TortoiseGit(TortoiseBase):
 
 class TortoiseHg(TortoiseBase):
     def __init__(self, binary_path, file):
-        self.find_root('.hg', file)
+        self.root_dir = Util.find_root('.hg', file)
         if binary_path != None:
             self.path = binary_path
         else:
             try:
-                self.set_binary_path(
+                self.path = Util.find_binary(
+                    self.__class__.__name__,
                     'TortoiseHg\\thgw.exe',
                     'thgw.exe',
                     'hg_hgtk_path')
             except (NotFoundError):
-                self.set_binary_path(
+                self.path = Util.find_binary(
+                    self.__class__.__name__,
                     'TortoiseHg\\hgtk.exe',
                     'thgw.exe (for TortoiseHg v2.x) or ' +
                     'hgtk.exe (for TortoiseHg v1.x)',
@@ -535,8 +491,17 @@ class SVN(VCS):
 
 class Git(VCS):
     def __init__(self, tortoise_proc_path, root_dir):
+        settings = sublime.load_settings('Tortoise.sublime-settings')
         self.root_dir = root_dir
-        self.git_path = os.path.dirname(tortoise_proc_path) + '\\tgit.exe'
+        self.git_path = settings.get('git_exe_path')
+        if self.git_path == None:
+            self.git_path = os.path.dirname(tortoise_proc_path) + '\\tgit.exe'
+            if not os.path.exists(self.git_path):
+                self.git_path = Util.find_binary(
+                    self.__class__.__name__,
+                    'Git\\bin\\git.exe',
+                    'git.exe or tgit.exe',
+                    'git_exe_path')
 
     def check_status(self, path):
         if os.path.isdir(path):
@@ -588,3 +553,59 @@ class Hg(VCS):
                 continue
             return line[0].upper()
         return ''
+
+
+class Util:
+    @staticmethod
+    def find_root(name, path, find_first=True):
+        result = None
+        last_dir = None
+        cur_dir  = path if os.path.isdir(path) else os.path.dirname(path)
+        while cur_dir != last_dir:
+            if result != None:
+                if not os.path.exists(os.path.join(cur_dir, name)):
+                    break
+            if os.path.exists(os.path.join(cur_dir, name)):
+                result = cur_dir
+                if find_first:
+                    break
+            last_dir = cur_dir
+            cur_dir  = os.path.dirname(cur_dir)
+
+        if result == None:
+            raise RepositoryNotFoundError(
+                'Unable to find "' + name + '" directory.')
+        return result
+
+    @staticmethod
+    def find_path(path_suffix):
+        result = None
+        root_drive = os.path.expandvars('%HOMEDRIVE%\\')
+        possible_dirs = ['Program Files\\', 'Program Files (x86)\\']
+
+        for dir in possible_dirs:
+            path = root_drive + dir + path_suffix
+            if os.path.exists(path):
+                result = path
+                break
+
+        if result == None:
+            raise NotFoundError(
+                'Unable to find "' + path_suffix + '".')
+        return result
+
+    @staticmethod
+    def find_binary(class_name, path_suffix, binary_info, setting_name):
+        result = None
+        try:
+            result = Util.find_path(path_suffix)
+        except (NotFoundError):
+            root_drive = os.path.expandvars('%HOMEDRIVE%\\')
+            normal_path = root_drive + 'Program Files\\' + path_suffix
+            raise NotFoundError(
+                'Unable to find ' + class_name + ' executable.\n\n' +
+                'Please add the path to ' + binary_info + ' to the setting ' +
+                '"' + setting_name + '" in "' + sublime.packages_path() +
+                '\\Tortoise\\Tortoise.sublime-settings".\n\nExample:\n\n' +
+                '{"' + setting_name + '": r"' + normal_path + '"}')
+        return result

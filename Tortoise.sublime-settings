@@ -1,20 +1,23 @@
 {
-	// The path to the TortoiseSVN TortoiseProc.exe executable
+	// The path to the TortoiseSVN TortoiseProc.exe executable.
 	//"svn_tortoiseproc_path": "C:\\Program Files\\TortoiseSVN\\bin\\TortoiseProc.exe",
 
-	// The path to the TortoiseGit TortoiseProc.exe executable
+	// The path to the TortoiseGit TortoiseProc.exe executable.
 	//"git_tortoiseproc_path": "C:\\Program Files\\TortoiseGit\\bin\\TortoiseProc.exe",
 	
-	// The path to the TortoiseHg thgw.exe (or hgtk.exe) executable
-	//"hg_hgtk_path": "C:\\Program Files\\TortoiseHg\\thgw.exe"
+	// The path to the git.exe (or TortoiseGit tgit.exe) executable.
+	//"git_exe_path": "C:\\Program Files\\Git\\bin\\git.exe",
+	
+	// The path to the TortoiseHg thgw.exe (or hgtk.exe) executable.
+	//"hg_hgtk_path": "C:\\Program Files\\TortoiseHg\\thgw.exe",
 
-	// The number of seconds of time to cache VCS statuses - tweaking this may
-	// help computers with slower hard drives
+	// The number of seconds of time to cache VCS statuses -
+	// tweaking this may help computers with slower hard drives.
 	"cache_length": 5,
 
-	// If context-menu entries should be enabled
+	// Specifies whether context-menu entries should be enabled.
 	"enable_menus": true,
 
-	// If debug messages should be printed to the console
+	// Specifies whether debug messages should be printed to the console.
 	"debug": false
 }
