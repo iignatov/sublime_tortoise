@@ -389,11 +389,19 @@ class TortoiseGit(TortoiseBase):
         if binary_path != None:
             self.path = binary_path
         else:
-            self.path = Util.find_binary(
-                self.__class__.__name__,
-                'TortoiseGit\\bin\\TortoiseProc.exe',
-                'TortoiseProc.exe',
-                'git_tortoiseproc_path')
+            try:
+                self.path = Util.find_binary(
+                    self.__class__.__name__,
+                    'TortoiseGit\\bin\\TortoiseGitProc.exe',
+                    'TortoiseGitProc.exe',
+                    'git_tortoiseproc_path')
+            except (NotFoundError):
+                self.path = Util.find_binary(
+                    self.__class__.__name__,
+                    'TortoiseGit\\bin\\TortoiseProc.exe',
+                    'TortoiseGitProc.exe (TortoiseGit >= 1.8.x) or ' +
+                    'TortoiseProc.exe (TortoiseGit < 1.8.x)',
+                    'git_tortoiseproc_path')
 
     def new_vcs(self):
         return Git(self.path, self.root_dir)
