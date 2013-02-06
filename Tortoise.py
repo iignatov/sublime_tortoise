@@ -484,15 +484,12 @@ class SVN(VCS):
         svn_path = os.path.join(stp_path, __name__, 'svn', 'svn.exe')
         args = [svn_path, 'status', path]
         result = self.run_niprocess(args).split('\n')
+        regex = Util.get_path_regex(path, self.root_dir)
         for line in result:
             if len(line) < 1:
                 continue
-
-            path_without_root = path.replace(self.root_dir + '\\', '', 1)
-            path_regex = re.escape(path_without_root) + '$'
-            if self.root_dir != path and re.search(path_regex, line) == None:
+            if re.search(regex, line) == None:
                 continue
-
             return line[0]
         return ''
 
@@ -513,28 +510,20 @@ class Git(VCS):
 
     def check_status(self, path):
         if os.path.isdir(path):
-            return self.check_status_dir(path)
+            args = [self.git_path, 'log', '-1', path]
+            result = self.run_niprocess(args).strip().split('\n')
+            return ('?' if result == [''] else '')
         else:
-            return self.check_status_file(path)
-
-    def check_status_dir(self, path):
-        args = [self.git_path, 'log', '-1', path]
-        result = self.run_niprocess(args).strip().split('\n')
-        return ('?' if result == [''] else '')
-
-    def check_status_file(self, path):
-        args = [self.git_path, 'status', '--short']
-        result = self.run_niprocess(args).strip().split('\n')
-        for line in result:
-            if len(line) < 2:
-                continue
-            path_without_root = path.replace(self.root_dir + '\\', '', 1)
-            path_regex = re.escape(path_without_root) + '$'
-            if self.root_dir != path and re.search(path_regex, line) == None:
-                continue
-
-            return (line[0] if line[0] != ' ' else line[1]).upper()
-        return ''
+            args = [self.git_path, 'status', '--short']
+            result = self.run_niprocess(args).strip().split('\n')
+            regex = Util.get_path_regex(path, self.root_dir)
+            for line in result:
+                if len(line) < 2:
+                    continue
+                if re.search(regex, line) == None:
+                    continue
+                return line.lstrip()[0].upper()
+            return ''
 
 
 class Hg(VCS):
@@ -544,23 +533,17 @@ class Hg(VCS):
 
     def check_status(self, path):
         if os.path.isdir(path):
-            return self.check_status_dir(path)
+            args = [self.hg_path, 'log', '-l', '1', '"' + path + '"']
+            result = self.run_niprocess(args).strip().split('\n')
+            return ('?' if result == [''] else '')
         else:
-            return self.check_status_file(path)
-
-    def check_status_dir(self, path):
-        args = [self.hg_path, 'log', '-l', '1', '"' + path + '"']
-        result = self.run_niprocess(args).strip().split('\n')
-        return ('?' if result == [''] else '')
-
-    def check_status_file(self, path):
-        args = [self.hg_path, 'status', path]
-        result = self.run_niprocess(args).split('\n')
-        for line in result:
-            if len(line) < 1:
-                continue
-            return line[0].upper()
-        return ''
+            args = [self.hg_path, 'status', path]
+            result = self.run_niprocess(args).split('\n')
+            for line in result:
+                if len(line) < 1:
+                    continue
+                return line[0].upper()
+            return ''
 
 
 class Util:
@@ -616,4 +599,11 @@ class Util:
                 '"' + setting_name + '" in "' + sublime.packages_path() +
                 '\\Tortoise\\Tortoise.sublime-settings".\n\nExample:\n\n' +
                 '{"' + setting_name + '": r"' + normal_path + '"}')
+        return result
+
+    @staticmethod
+    def get_path_regex(path, root):
+        result = re.escape(path.replace(root + '\\', '', 1)) + '$'
+        for s in ['\/', '\\\\']:
+            result = result.replace(s, '[\\/\\\\]')
         return result
