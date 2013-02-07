@@ -274,13 +274,6 @@ class TortoiseRevertCommand(sublime_plugin.WindowCommand, TortoiseCommand):
             ['A', 'M', 'R', 'C', 'U']
 
 
-class ForkGui():
-    def __init__(self, cmd, cwd):
-        subprocess.Popen(cmd, stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            cwd=cwd)
-
-
 class TortoiseBase():
     def get_status(self, path):
         global file_status_cache
@@ -323,12 +316,12 @@ class TortoiseBase():
         path = self.root_dir if path == None else path
         path = os.path.relpath(path, self.root_dir)
         args = self.get_arguments(name, path)
-        ForkGui(args, self.root_dir)
+        Util.run_process(args, self.root_dir)
 
     def explore(self, path=None):
         path = self.root_dir if path == None else os.path.dirname(path)
         args = 'explorer.exe "%s"' % path
-        ForkGui(args, None)
+        Util.run_process(args)
 
     def status(self, path=None):
         self.run_command('status', path)
@@ -448,101 +441,72 @@ class TortoiseHg(TortoiseBase):
         return [self.path, name, '--nofork', path]
 
 
-class NonInteractiveProcess():
-    def __init__(self, args, cwd=None):
-        self.args = args
-        self.cwd  = cwd
-
-    def run(self):
-        startupinfo = None
-        if os.name == 'nt':
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-
-        proc = subprocess.Popen(
-            self.args,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            startupinfo=startupinfo,
-            cwd=self.cwd)
-
-        return proc.stdout.read().replace('\r\n', '\n').rstrip(' \n\r')
+class CLI():
+    def get_command_output(self, args, strip=True, split=True):
+        result = Util.get_process_output([self.cli_path] + args, self.root_dir)
+        if strip:
+            result = result.strip()
+        if split:
+            result = result.split('\n')
+        return result
 
 
-class VCS():
-    def run_niprocess(self, args):
-        return NonInteractiveProcess(args, cwd=self.root_dir).run()
-
-
-class SVN(VCS):
+class SVN(CLI):
     def __init__(self, root_dir):
         self.root_dir = root_dir
+        stp_path = sublime.packages_path()
+        self.cli_path = os.path.join(stp_path, __name__, 'svn', 'svn.exe')
 
     def check_status(self, path):
-        stp_path = sublime.packages_path()
-        svn_path = os.path.join(stp_path, __name__, 'svn', 'svn.exe')
-        args = [svn_path, 'status', path]
-        result = self.run_niprocess(args).split('\n')
+        output = self.get_command_output(['status', path], strip=False)
         regex = Util.get_path_regex(path, self.root_dir)
-        for line in result:
-            if len(line) < 1:
-                continue
-            if re.search(regex, line) == None:
-                continue
-            return line[0]
+        for line in output:
+            if len(line) >= 1 and re.search(regex, line) != None:
+                return line[0]
         return ''
 
 
-class Git(VCS):
-    def __init__(self, tortoise_proc_path, root_dir):
+class Git(CLI):
+    def __init__(self, gui_path, root_dir):
         settings = sublime.load_settings('Tortoise.sublime-settings')
         self.root_dir = root_dir
-        self.git_path = settings.get('git_exe_path')
-        if self.git_path == None:
-            self.git_path = os.path.dirname(tortoise_proc_path) + '\\tgit.exe'
-            if not os.path.exists(self.git_path):
-                self.git_path = Util.find_binary(
+        self.cli_path = settings.get('git_cli_path')
+        if self.cli_path == None:
+            self.cli_path = os.path.dirname(gui_path) + '\\tgit.exe'
+            if not os.path.exists(self.cli_path):
+                self.cli_path = Util.find_binary(
                     self.__class__.__name__,
                     'Git\\bin\\git.exe',
                     'git.exe or tgit.exe',
-                    'git_exe_path')
+                    'git_cli_path')
 
     def check_status(self, path):
         if os.path.isdir(path):
-            args = [self.git_path, 'log', '-1', path]
-            result = self.run_niprocess(args).strip().split('\n')
-            return ('?' if result == [''] else '')
+            output = self.get_command_output(['log', '-1', path])
+            return ('?' if output == [''] else '')
         else:
-            args = [self.git_path, 'status', '--short']
-            result = self.run_niprocess(args).strip().split('\n')
+            output = self.get_command_output(['status', '--short'])
             regex = Util.get_path_regex(path, self.root_dir)
-            for line in result:
-                if len(line) < 2:
-                    continue
-                if re.search(regex, line) == None:
-                    continue
-                return line.lstrip()[0].upper()
+            for line in output:
+                if len(line) >= 2 and re.search(regex, line) != None:
+                    return line.lstrip()[0].upper()
             return ''
 
 
-class Hg(VCS):
-    def __init__(self, tortoise_proc_path, root_dir):
+class Hg(CLI):
+    def __init__(self, gui_path, root_dir):
         self.root_dir = root_dir
-        self.hg_path = os.path.dirname(tortoise_proc_path) + '\\hg.exe'
+        self.cli_path = os.path.dirname(gui_path) + '\\hg.exe'
 
     def check_status(self, path):
         if os.path.isdir(path):
-            args = [self.hg_path, 'log', '-l', '1', '"' + path + '"']
-            result = self.run_niprocess(args).strip().split('\n')
-            return ('?' if result == [''] else '')
+            output = self.get_command_output(['log', '-l', '1', '"%s"' % path])
+            return ('?' if output == [''] else '')
         else:
-            args = [self.hg_path, 'status', path]
-            result = self.run_niprocess(args).split('\n')
-            for line in result:
-                if len(line) < 1:
-                    continue
-                return line[0].upper()
+            output = self.get_command_output(['status', path], strip=False)
+            for line in output:
+                if len(line) >= 1:
+                    return line[0].upper()
             return ''
 
 
@@ -607,3 +571,25 @@ class Util:
         for s in ['\/', '\\\\']:
             result = result.replace(s, '[\\/\\\\]')
         return result
+
+    @staticmethod
+    def run_process(args, path=None, startupinfo=None):
+        return subprocess.Popen(
+            args,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            startupinfo=startupinfo,
+            cwd=path)
+
+    @staticmethod
+    def get_process_output(args, path=None):
+        if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        else:
+            startupinfo = None
+
+        proc = Util.run_process(args, path, startupinfo)
+
+        return proc.stdout.read().replace('\r\n', '\n').rstrip(' \n\r')

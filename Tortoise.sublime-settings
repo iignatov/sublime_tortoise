@@ -6,7 +6,7 @@
 	//"git_tortoiseproc_path": "C:\\Program Files\\TortoiseGit\\bin\\TortoiseProc.exe",
 	
 	// The path to the git.exe (or TortoiseGit tgit.exe) executable.
-	//"git_exe_path": "C:\\Program Files\\Git\\bin\\git.exe",
+	//"git_cli_path": "C:\\Program Files\\Git\\bin\\git.exe",
 	
 	// The path to the TortoiseHg thgw.exe (or hgtk.exe) executable.
 	//"hg_hgtk_path": "C:\\Program Files\\TortoiseHg\\thgw.exe",
