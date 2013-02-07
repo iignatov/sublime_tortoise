@@ -24,24 +24,22 @@ class TortoiseCommand():
         return paths[0] if paths else self.window.active_view().file_name()
 
     def get_vcs(self, path):
-        settings = sublime.load_settings('Tortoise.sublime-settings')
-
         if path == None:
             raise NotFoundError('Unable to run commands on an unsaved file')
         vcs = None
 
         try:
-            vcs = TortoiseSVN(settings.get('svn_tortoiseproc_path'), path)
+            vcs = TortoiseSVN(Info.get('svn_tortoiseproc_path'), path)
         except (RepositoryNotFoundError):
             pass
 
         try:
-            vcs = TortoiseGit(settings.get('git_tortoiseproc_path'), path)
+            vcs = TortoiseGit(Info.get('git_tortoiseproc_path'), path)
         except (RepositoryNotFoundError):
             pass
 
         try:
-            vcs = TortoiseHg(settings.get('hg_hgtk_path'), path)
+            vcs = TortoiseHg(Info.get('hg_hgtk_path'), path)
         except (RepositoryNotFoundError):
             pass
 
@@ -53,8 +51,7 @@ class TortoiseCommand():
         return vcs
 
     def menus_enabled(self):
-        settings = sublime.load_settings('Tortoise.sublime-settings')
-        return settings.get('enable_menus', True)
+        return Info.get('enable_menus', True)
 
 
 def handles_not_found(fn):
@@ -278,15 +275,14 @@ class TortoiseBase():
     def get_status(self, path):
         global file_status_cache
         status = ''
-        settings = sublime.load_settings('Tortoise.sublime-settings')
 
         if path in file_status_cache:
             if file_status_cache[path]['time'] > time.time():
-                if settings.get('debug'):
+                if Info.get('debug'):
                     print 'Fetching cached status for %s' % path
                 return file_status_cache[path]['status']
 
-        if settings.get('debug'):
+        if Info.get('debug'):
             start_time = time.time()
 
         try:
@@ -295,11 +291,11 @@ class TortoiseBase():
             sublime.error_message(str(exception))
 
         file_status_cache[path] = {
-            'time': time.time() + settings.get('cache_length'),
+            'time': time.time() + Info.get('cache_length'),
             'status': status
         }
 
-        if settings.get('debug'):
+        if Info.get('debug'):
             print 'Fetching status for %s in %s seconds' % \
                 (path, str(time.time() - start_time))
 
@@ -454,8 +450,7 @@ class CLI():
 class SVN(CLI):
     def __init__(self, root_dir):
         self.root_dir = root_dir
-        stp_path = sublime.packages_path()
-        self.cli_path = os.path.join(stp_path, __name__, 'svn', 'svn.exe')
+        self.cli_path = os.path.join(Info.path, 'svn', 'svn.exe')
 
     def check_status(self, path):
         output = self.get_command_output(['status', path], strip=False)
@@ -468,9 +463,8 @@ class SVN(CLI):
 
 class Git(CLI):
     def __init__(self, gui_path, root_dir):
-        settings = sublime.load_settings('Tortoise.sublime-settings')
         self.root_dir = root_dir
-        self.cli_path = settings.get('git_cli_path')
+        self.cli_path = Info.get('git_cli_path')
         if self.cli_path == None:
             self.cli_path = os.path.dirname(gui_path) + '\\tgit.exe'
             if not os.path.exists(self.cli_path):
@@ -508,6 +502,12 @@ class Hg(CLI):
                 if len(line) >= 1:
                     return line[0].upper()
             return ''
+
+
+class Info:
+    name = __name__
+    path = os.path.join(sublime.packages_path(), __name__)
+    get = sublime.load_settings('%s.sublime-settings' % __name__).get
 
 
 class Util:
