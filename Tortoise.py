@@ -6,11 +6,15 @@ import re
 import time
 
 
-class RepositoryNotFoundError(Exception):
+class TortoiseError(Exception):
     pass
 
 
-class NotFoundError(Exception):
+class NotFoundError(TortoiseError):
+    pass
+
+
+class RepositoryNotFoundError(NotFoundError):
     pass
 
 
@@ -25,7 +29,7 @@ class TortoiseCommand():
 
     def get_vcs(self, path):
         if path == None:
-            raise NotFoundError('Unable to run commands on an unsaved file')
+            raise TortoiseError('Unable to run commands on an unsaved file.')
         vcs = None
 
         try:
@@ -44,7 +48,7 @@ class TortoiseCommand():
             pass
 
         if vcs == None:
-            raise NotFoundError(
+            raise TortoiseError(
                 'The current file does not appear to be ' +
                 'in a SVN, Git or Mercurial working copy.')
 
@@ -54,41 +58,41 @@ class TortoiseCommand():
         return Info.get('enable_menus', True)
 
 
-def handles_not_found(fn):
+def handles_error(fn):
     def handler(self, *args, **kwargs):
         try:
             fn(self, *args, **kwargs)
-        except (NotFoundError) as (exception):
+        except (TortoiseError) as (exception):
             sublime.error_message('Tortoise: ' + str(exception))
     return handler
 
 
-def invisible_when_not_found(fn):
+def invisible_when_error(fn):
     def handler(self, *args, **kwargs):
         try:
             res = fn(self, *args, **kwargs)
             if res != None:
                 return res
             return True
-        except (NotFoundError):
+        except (TortoiseError):
             return False
     return handler
 
 
 class TortoiseExploreCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_not_found
+    @handles_error
     def run(self, paths=None):
         path = self.get_path(paths)
         self.get_vcs(path).explore(path if paths else None)
 
 
 class TortoiseCommitCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_not_found
+    @handles_error
     def run(self, paths=None):
         path = self.get_path(paths)
         self.get_vcs(path).commit(path if os.path.isdir(path) else None)
 
-    @invisible_when_not_found
+    @invisible_when_error
     def is_visible(self, paths=None):
         if not self.menus_enabled():
             return False
@@ -100,12 +104,12 @@ class TortoiseCommitCommand(sublime_plugin.WindowCommand, TortoiseCommand):
 
 
 class TortoiseStatusCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_not_found
+    @handles_error
     def run(self, paths=None):
         path = self.get_path(paths)
         self.get_vcs(path).status(path if os.path.isdir(path) else None)
 
-    @invisible_when_not_found
+    @invisible_when_error
     def is_visible(self, paths=None):
         if not self.menus_enabled():
             return False
@@ -117,12 +121,12 @@ class TortoiseStatusCommand(sublime_plugin.WindowCommand, TortoiseCommand):
 
 
 class TortoiseSyncCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_not_found
+    @handles_error
     def run(self, paths=None):
         path = self.get_path(paths)
         self.get_vcs(path).sync(path if os.path.isdir(path) else None)
 
-    @invisible_when_not_found
+    @invisible_when_error
     def is_visible(self, paths=None):
         if not self.menus_enabled():
             return False
@@ -134,12 +138,12 @@ class TortoiseSyncCommand(sublime_plugin.WindowCommand, TortoiseCommand):
 
 
 class TortoiseLogCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_not_found
+    @handles_error
     def run(self, paths=None):
         path = self.get_path(paths)
         self.get_vcs(path).log(path if paths else None)
 
-    @invisible_when_not_found
+    @invisible_when_error
     def is_visible(self, paths=None):
         if not self.menus_enabled():
             return False
@@ -150,7 +154,7 @@ class TortoiseLogCommand(sublime_plugin.WindowCommand, TortoiseCommand):
         return path and vcs.get_status(path) in \
             ['A', '', 'M', 'R', 'C', 'U']
 
-    @invisible_when_not_found
+    @invisible_when_error
     def is_enabled(self, paths=None):
         path = self.get_path(paths)
         if os.path.isdir(path):
@@ -159,12 +163,12 @@ class TortoiseLogCommand(sublime_plugin.WindowCommand, TortoiseCommand):
             ['', 'M', 'R', 'C', 'U']
 
 class TortoiseBlameCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_not_found
+    @handles_error
     def run(self, paths=None):
         path = self.get_path(paths)
         self.get_vcs(path).blame(path if paths else None)
 
-    @invisible_when_not_found
+    @invisible_when_error
     def is_visible(self, paths=None):
         if not self.menus_enabled():
             return False
@@ -175,7 +179,7 @@ class TortoiseBlameCommand(sublime_plugin.WindowCommand, TortoiseCommand):
         return path and vcs.get_status(path) in \
             ['A', '', 'M', 'R', 'C', 'U']
 
-    @invisible_when_not_found
+    @invisible_when_error
     def is_enabled(self, paths=None):
         path = self.get_path(paths)
         if os.path.isdir(path):
@@ -184,12 +188,12 @@ class TortoiseBlameCommand(sublime_plugin.WindowCommand, TortoiseCommand):
             ['A', '', 'M', 'R', 'C', 'U']
 
 class TortoiseDiffCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_not_found
+    @handles_error
     def run(self, paths=None):
         path = self.get_path(paths)
         self.get_vcs(path).diff(path if paths else None)
 
-    @invisible_when_not_found
+    @invisible_when_error
     def is_visible(self, paths=None):
         if not self.menus_enabled():
             return False
@@ -200,7 +204,7 @@ class TortoiseDiffCommand(sublime_plugin.WindowCommand, TortoiseCommand):
         return vcs.get_status(path) in \
             ['A', '', 'M', 'R', 'C', 'U']
 
-    @invisible_when_not_found
+    @invisible_when_error
     def is_enabled(self, paths=None):
         path = self.get_path(paths)
         if os.path.isdir(path):
@@ -213,12 +217,12 @@ class TortoiseDiffCommand(sublime_plugin.WindowCommand, TortoiseCommand):
 
 
 class TortoiseAddCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_not_found
+    @handles_error
     def run(self, paths=None):
         path = self.get_path(paths)
         self.get_vcs(path).add(path)
 
-    @invisible_when_not_found
+    @invisible_when_error
     def is_visible(self, paths=None):
         if not self.menus_enabled():
             return False
@@ -227,12 +231,12 @@ class TortoiseAddCommand(sublime_plugin.WindowCommand, TortoiseCommand):
 
 
 class TortoiseRemoveCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_not_found
+    @handles_error
     def run(self, paths=None):
         path = self.get_path(paths)
         self.get_vcs(path).remove(path)
 
-    @invisible_when_not_found
+    @invisible_when_error
     def is_visible(self, paths=None):
         if not self.menus_enabled():
             return False
@@ -240,7 +244,7 @@ class TortoiseRemoveCommand(sublime_plugin.WindowCommand, TortoiseCommand):
         return self.get_vcs(path).get_status(path) in \
             ['A', '', 'M', 'R', 'C', 'U']
 
-    @invisible_when_not_found
+    @invisible_when_error
     def is_enabled(self, paths=None):
         path = self.get_path(paths)
         if os.path.isdir(path):
@@ -249,12 +253,12 @@ class TortoiseRemoveCommand(sublime_plugin.WindowCommand, TortoiseCommand):
 
 
 class TortoiseRevertCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_not_found
+    @handles_error
     def run(self, paths=None):
         path = self.get_path(paths)
         self.get_vcs(path).revert(path)
 
-    @invisible_when_not_found
+    @invisible_when_error
     def is_visible(self, paths=None):
         if not self.menus_enabled():
             return False
@@ -262,7 +266,7 @@ class TortoiseRevertCommand(sublime_plugin.WindowCommand, TortoiseCommand):
         return self.get_vcs(path).get_status(path) in \
             ['A', '', 'M', 'R', 'C', 'U']
 
-    @invisible_when_not_found
+    @invisible_when_error
     def is_enabled(self, paths=None):
         path = self.get_path(paths)
         if os.path.isdir(path):
