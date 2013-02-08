@@ -319,41 +319,19 @@ class TortoiseBase():
         args = 'explorer.exe "%s"' % path
         Util.run_process(args)
 
-    def status(self, path=None):
-        self.run_command('status', path)
-
-    def commit(self, path=None):
-        self.run_command('commit', path)
-
-    def sync(self, path=None):
-        self.run_command('sync', path)
-
-    def log(self, path=None):
-        self.run_command('log', path)
-
-    def blame(self, path=None):
-        self.run_command('blame', path)
-
-    def diff(self, path):
-        self.run_command('diff', path)
-
-    def add(self, path):
-        self.run_command('add', path)
-
-    def remove(self, path):
-        self.run_command('remove', path)
-
-    def revert(self, path):
-        self.run_command('revert', path)
+    def __getattr__(self, name):
+        def handler(*args, **kwargs):
+            if name.isalpha():
+                self.run_command(name, *args, **kwargs)
+        return handler
 
 
 class TortoiseSVN(TortoiseBase):
-    def __init__(self, binary_path, file):
-        self.root_dir = Util.find_root('.svn', file, False)
-        if binary_path != None:
-            self.path = binary_path
-        else:
-            self.path = Util.find_binary(
+    def __init__(self, gui_path, path):
+        self.root_dir = Util.find_root('.svn', path, False)
+        self.gui_path = gui_path
+        if self.gui_path == None:
+            self.gui_path = Util.find_binary(
                 self.__class__.__name__,
                 'TortoiseSVN\\bin\\TortoiseProc.exe',
                 'TortoiseProc.exe',
@@ -363,29 +341,25 @@ class TortoiseSVN(TortoiseBase):
         return SVN(self.root_dir)
 
     def get_mappings(self):
-        return {
-            'status': 'repostatus',
-            'sync': 'update'
-        }
+        return { 'status': 'repostatus', 'sync': 'update' }
 
     def get_arguments(self, name, path):
-        return '"%s" /command:%s /path:"%s"' % (self.path, name, path)
+        return '"%s" /command:%s /path:"%s"' % (self.gui_path, name, path)
 
 
 class TortoiseGit(TortoiseBase):
-    def __init__(self, binary_path, file):
-        self.root_dir = Util.find_root('.git', file)
-        if binary_path != None:
-            self.path = binary_path
-        else:
+    def __init__(self, gui_path, path):
+        self.root_dir = Util.find_root('.git', path)
+        self.gui_path = gui_path
+        if self.gui_path == None:
             try:
-                self.path = Util.find_binary(
+                self.gui_path = Util.find_binary(
                     self.__class__.__name__,
                     'TortoiseGit\\bin\\TortoiseGitProc.exe',
                     'TortoiseGitProc.exe',
                     'git_tortoiseproc_path')
             except (NotFoundError):
-                self.path = Util.find_binary(
+                self.gui_path = Util.find_binary(
                     self.__class__.__name__,
                     'TortoiseGit\\bin\\TortoiseProc.exe',
                     'TortoiseGitProc.exe (TortoiseGit >= 1.8.x) or ' +
@@ -393,31 +367,28 @@ class TortoiseGit(TortoiseBase):
                     'git_tortoiseproc_path')
 
     def new_vcs(self):
-        return Git(self.path, self.root_dir)
+        return Git(self.gui_path, self.root_dir)
 
     def get_mappings(self):
-        return {
-            'status': 'repostatus'
-        }
+        return { 'status': 'repostatus' }
 
     def get_arguments(self, name, path):
-        return '"%s" /command:%s /path:"%s"' % (self.path, name, path)
+        return '"%s" /command:%s /path:"%s"' % (self.gui_path, name, path)
 
 
 class TortoiseHg(TortoiseBase):
-    def __init__(self, binary_path, file):
-        self.root_dir = Util.find_root('.hg', file)
-        if binary_path != None:
-            self.path = binary_path
-        else:
+    def __init__(self, gui_path, path):
+        self.root_dir = Util.find_root('.hg', path)
+        self.gui_path = gui_path
+        if self.gui_path == None:
             try:
-                self.path = Util.find_binary(
+                self.gui_path = Util.find_binary(
                     self.__class__.__name__,
                     'TortoiseHg\\thgw.exe',
                     'thgw.exe',
                     'hg_hgtk_path')
             except (NotFoundError):
-                self.path = Util.find_binary(
+                self.gui_path = Util.find_binary(
                     self.__class__.__name__,
                     'TortoiseHg\\hgtk.exe',
                     'thgw.exe (for TortoiseHg v2.x) or ' +
@@ -425,16 +396,13 @@ class TortoiseHg(TortoiseBase):
                     'hg_hgtk_path')
 
     def new_vcs(self):
-        return Hg(self.path, self.root_dir)
+        return Hg(self.gui_path, self.root_dir)
 
     def get_mappings(self):
-        return {
-            'sync': 'synch',
-            'diff': 'vdiff'
-        }
+        return { 'sync': 'synch', 'diff': 'vdiff' }
 
     def get_arguments(self, name, path):
-        return [self.path, name, '--nofork', path]
+        return [self.gui_path, name, '--nofork', path]
 
 
 class CLI():
