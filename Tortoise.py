@@ -22,257 +22,160 @@ file_status_cache = {}
 
 
 class TortoiseCommand():
+    TYPE_ANY = 0
+    TYPE_DIR = 1
+    TYPE_FILE = 2
+    TYPE_VAR = 3
+
     def get_path(self, paths):
-        if paths == True:
+        if paths == True or not paths:
             return self.window.active_view().file_name()
-        return paths[0] if paths else self.window.active_view().file_name()
+        return paths[0]
 
     def get_vcs(self, path):
+        result = None
+
         if path == None:
             raise TortoiseError('Unable to run commands on an unsaved file.')
-        vcs = None
 
-        try:
-            vcs = TortoiseSVN(Info.get('svn_tortoiseproc_path'), path)
-        except (RepositoryNotFoundError):
-            pass
+        for create_vcs_func in [
+            lambda: TortoiseHg(Info.get('hg_hgtk_path'), path),
+            lambda: TortoiseGit(Info.get('git_tortoiseproc_path'), path),
+            lambda: TortoiseSVN(Info.get('svn_tortoiseproc_path'), path)
+        ]:
+            try:
+                result = create_vcs_func()
+                break
+            except (RepositoryNotFoundError):
+                pass
 
-        try:
-            vcs = TortoiseGit(Info.get('git_tortoiseproc_path'), path)
-        except (RepositoryNotFoundError):
-            pass
-
-        try:
-            vcs = TortoiseHg(Info.get('hg_hgtk_path'), path)
-        except (RepositoryNotFoundError):
-            pass
-
-        if vcs == None:
+        if result == None:
             raise TortoiseError(
                 'The current file does not appear to be ' +
-                'in a SVN, Git or Mercurial working copy.')
+                'in a Mercurial, Git or SVN working copy.')
 
-        return vcs
+        return result
 
-    def menus_enabled(self):
-        return Info.get('enable_menus', True)
-
-
-def handles_error(fn):
-    def handler(self, *args, **kwargs):
+    def run(self, paths=None):
+        path = self.get_path(paths)
+        if self.command_type == TortoiseCommand.TYPE_VAR:
+            args = path
+        elif self.command_type == TortoiseCommand.TYPE_DIR:
+            args = path if os.path.isdir(path) else None
+        else:
+            args = path if paths else None
         try:
-            fn(self, *args, **kwargs)
+            getattr(self.get_vcs(path), self.command_name)(args)
         except (TortoiseError) as (exception):
             sublime.error_message('Tortoise: ' + str(exception))
-    return handler
 
-
-def invisible_when_error(fn):
-    def handler(self, *args, **kwargs):
-        try:
-            res = fn(self, *args, **kwargs)
-            if res != None:
-                return res
-            return True
-        except (TortoiseError):
-            return False
-    return handler
-
-
-class TortoiseExploreCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_error
-    def run(self, paths=None):
-        path = self.get_path(paths)
-        self.get_vcs(path).explore(path if paths else None)
-
-
-class TortoiseCommitCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_error
-    def run(self, paths=None):
-        path = self.get_path(paths)
-        self.get_vcs(path).commit(path if os.path.isdir(path) else None)
-
-    @invisible_when_error
     def is_visible(self, paths=None):
-        if not self.menus_enabled():
+        if not Info.get('enable_menus', True):
             return False
         path = self.get_path(paths)
-        if not path:
-            return False
-        self.get_vcs(path)
-        return os.path.isdir(path)
+        if path:
+            try:
+                vcs = self.get_vcs(path) # is path managed by VCS?
+                if self.command_type != TortoiseCommand.TYPE_VAR:
+                    if os.path.isdir(path):
+                        return self.command_type != TortoiseCommand.TYPE_FILE
+                if self.has_list('visible'):
+                    return vcs.get_status(path) in self.get_list('visible', vcs)
+            except (TortoiseError):
+                pass
+        return False
 
-
-class TortoiseStatusCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_error
-    def run(self, paths=None):
-        path = self.get_path(paths)
-        self.get_vcs(path).status(path if os.path.isdir(path) else None)
-
-    @invisible_when_error
-    def is_visible(self, paths=None):
-        if not self.menus_enabled():
-            return False
-        path = self.get_path(paths)
-        if not path:
-            return False
-        self.get_vcs(path)
-        return os.path.isdir(path)
-
-
-class TortoiseSyncCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_error
-    def run(self, paths=None):
-        path = self.get_path(paths)
-        self.get_vcs(path).sync(path if os.path.isdir(path) else None)
-
-    @invisible_when_error
-    def is_visible(self, paths=None):
-        if not self.menus_enabled():
-            return False
-        path = self.get_path(paths)
-        if not path:
-            return False
-        self.get_vcs(path)
-        return os.path.isdir(path)
-
-
-class TortoiseLogCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_error
-    def run(self, paths=None):
-        path = self.get_path(paths)
-        self.get_vcs(path).log(path if paths else None)
-
-    @invisible_when_error
-    def is_visible(self, paths=None):
-        if not self.menus_enabled():
-            return False
-        path = self.get_path(paths)
-        vcs = self.get_vcs(path)
-        if os.path.isdir(path):
-            return True
-        return path and vcs.get_status(path) in \
-            ['A', '', 'M', 'R', 'C', 'U']
-
-    @invisible_when_error
     def is_enabled(self, paths=None):
         path = self.get_path(paths)
-        if os.path.isdir(path):
-            return True
-        return path and self.get_vcs(path).get_status(path) in \
-            ['', 'M', 'R', 'C', 'U']
+        if path:
+            if os.path.isdir(path):
+                return self.command_type != TortoiseCommand.TYPE_FILE
+            try:
+                if self.has_list('enabled'):
+                    vcs = self.get_vcs(path)
+                    return vcs.get_status(path) in self.get_list('enabled', vcs)
+                return True
+            except (TortoiseError):
+                pass
+        return False
 
-class TortoiseBlameCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_error
-    def run(self, paths=None):
-        path = self.get_path(paths)
-        self.get_vcs(path).blame(path if paths else None)
+    def has_list(self, name):
+        return hasattr(self, 'get_%s_list' % name) or \
+              (hasattr(self, name + '_list') and getattr(self, name + '_list'))
 
-    @invisible_when_error
-    def is_visible(self, paths=None):
-        if not self.menus_enabled():
-            return False
-        path = self.get_path(paths)
-        if os.path.isdir(path):
-            return False
-        vcs = self.get_vcs(path)
-        return path and vcs.get_status(path) in \
-            ['A', '', 'M', 'R', 'C', 'U']
+    def get_list(self, name, vcs):
+        if hasattr(self, 'get_%s_list' % name):
+            return getattr(self, 'get_%s_list' % name)(vcs)
+        if hasattr(self, name + '_list'):
+            return getattr(self, name + '_list')
+        return None
 
-    @invisible_when_error
-    def is_enabled(self, paths=None):
-        path = self.get_path(paths)
-        if os.path.isdir(path):
-            return False
-        return path and self.get_vcs(path).get_status(path) in \
-            ['A', '', 'M', 'R', 'C', 'U']
 
-class TortoiseDiffCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_error
-    def run(self, paths=None):
-        path = self.get_path(paths)
-        self.get_vcs(path).diff(path if paths else None)
+class TortoiseExploreCommand(TortoiseCommand, sublime_plugin.WindowCommand):
+    command_name = 'explore'
+    command_type = TortoiseCommand.TYPE_ANY
 
-    @invisible_when_error
-    def is_visible(self, paths=None):
-        if not self.menus_enabled():
-            return False
-        path = self.get_path(paths)
-        vcs = self.get_vcs(path)
-        if os.path.isdir(path):
-            return True
-        return vcs.get_status(path) in \
-            ['A', '', 'M', 'R', 'C', 'U']
 
-    @invisible_when_error
-    def is_enabled(self, paths=None):
-        path = self.get_path(paths)
-        if os.path.isdir(path):
-            return True
-        vcs = self.get_vcs(path)
+class TortoiseCommitCommand(TortoiseCommand, sublime_plugin.WindowCommand):
+    command_name = 'commit'
+    command_type = TortoiseCommand.TYPE_DIR
+
+
+class TortoiseStatusCommand(TortoiseCommand, sublime_plugin.WindowCommand):
+    command_name = 'status'
+    command_type = TortoiseCommand.TYPE_DIR
+
+
+class TortoiseSyncCommand(TortoiseCommand, sublime_plugin.WindowCommand):
+    command_name = 'sync'
+    command_type = TortoiseCommand.TYPE_DIR
+
+
+class TortoiseLogCommand(TortoiseCommand, sublime_plugin.WindowCommand):
+    command_name = 'log'
+    command_type = TortoiseCommand.TYPE_ANY
+    visible_list = ['A', '', 'M', 'R', 'C', 'U']
+    enabled_list = ['', 'M', 'R', 'C', 'U']
+
+
+class TortoiseBlameCommand(TortoiseCommand, sublime_plugin.WindowCommand):
+    command_name = 'blame'
+    command_type = TortoiseCommand.TYPE_FILE
+    visible_list = ['A', '', 'M', 'R', 'C', 'U']
+    enabled_list = ['A', '', 'M', 'R', 'C', 'U']
+
+
+class TortoiseDiffCommand(TortoiseCommand, sublime_plugin.WindowCommand):
+    command_name = 'diff'
+    command_type = TortoiseCommand.TYPE_ANY
+    visible_list = ['A', '', 'M', 'R', 'C', 'U']
+    enabled_list = True
+
+    def get_enabled_list(self, vcs):
         if isinstance(vcs, TortoiseHg):
-            return vcs.get_status(path) in ['M']
-        else:
-            return vcs.get_status(path) in ['A', 'M', 'R', 'C', 'U']
+            return ['M']
+        return ['A', 'M', 'R', 'C', 'U']
 
 
-class TortoiseAddCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_error
-    def run(self, paths=None):
-        path = self.get_path(paths)
-        self.get_vcs(path).add(path)
-
-    @invisible_when_error
-    def is_visible(self, paths=None):
-        if not self.menus_enabled():
-            return False
-        path = self.get_path(paths)
-        return self.get_vcs(path).get_status(path) in ['D', '?']
+class TortoiseAddCommand(TortoiseCommand, sublime_plugin.WindowCommand):
+    command_name = 'add'
+    command_type = TortoiseCommand.TYPE_VAR
+    visible_list = ['D', '?']
+    enabled_list = False
 
 
-class TortoiseRemoveCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_error
-    def run(self, paths=None):
-        path = self.get_path(paths)
-        self.get_vcs(path).remove(path)
-
-    @invisible_when_error
-    def is_visible(self, paths=None):
-        if not self.menus_enabled():
-            return False
-        path = self.get_path(paths)
-        return self.get_vcs(path).get_status(path) in \
-            ['A', '', 'M', 'R', 'C', 'U']
-
-    @invisible_when_error
-    def is_enabled(self, paths=None):
-        path = self.get_path(paths)
-        if os.path.isdir(path):
-            return True
-        return self.get_vcs(path).get_status(path) in ['']
+class TortoiseRemoveCommand(TortoiseCommand, sublime_plugin.WindowCommand):
+    command_name = 'remove'
+    command_type = TortoiseCommand.TYPE_VAR
+    visible_list = ['A', '', 'M', 'R', 'C', 'U']
+    enabled_list = ['']
 
 
-class TortoiseRevertCommand(sublime_plugin.WindowCommand, TortoiseCommand):
-    @handles_error
-    def run(self, paths=None):
-        path = self.get_path(paths)
-        self.get_vcs(path).revert(path)
-
-    @invisible_when_error
-    def is_visible(self, paths=None):
-        if not self.menus_enabled():
-            return False
-        path = self.get_path(paths)
-        return self.get_vcs(path).get_status(path) in \
-            ['A', '', 'M', 'R', 'C', 'U']
-
-    @invisible_when_error
-    def is_enabled(self, paths=None):
-        path = self.get_path(paths)
-        if os.path.isdir(path):
-            return True
-        return self.get_vcs(path).get_status(path) in \
-            ['A', 'M', 'R', 'C', 'U']
+class TortoiseRevertCommand(TortoiseCommand, sublime_plugin.WindowCommand):
+    command_name = 'revert'
+    command_type = TortoiseCommand.TYPE_VAR
+    visible_list = ['A', '', 'M', 'R', 'C', 'U']
+    enabled_list = ['A', 'M', 'R', 'C', 'U']
 
 
 class TortoiseBase():
