@@ -99,6 +99,16 @@ class TortoiseCommand():
                 pass
         return False
 
+    def description(self, **args):
+        name = 'Tortoise'
+        if Info.get('show_vcs_name') and 'paths' in args:
+            try:
+                path = self.get_path(args['paths'])
+                name = self.get_vcs(path).__class__.__name__
+            except (TortoiseError):
+                pass
+        return name + ' ' + self.command_name.title() + '...'
+
     def has_list(self, name):
         return hasattr(self, 'get_%s_list' % name) or \
               (hasattr(self, name + '_list') and getattr(self, name + '_list'))

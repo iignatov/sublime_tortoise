@@ -18,6 +18,9 @@
 	// Specifies whether context-menu entries should be enabled.
 	"enable_menus": true,
 
+	// Specifies whether to show the VCS name in context-menu entries.
+	"show_vcs_name": false,
+
 	// Specifies whether debug messages should be printed to the console.
 	"debug": false
 }
