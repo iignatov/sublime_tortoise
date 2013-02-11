@@ -18,6 +18,9 @@
 	// Specifies whether context-menu entries should be enabled.
 	"enable_menus": true,
 
+	// Specifies which version control systems to load and in what order.
+	"load_vcs_list": [ "hg", "git", "svn" ],
+
 	// Specifies whether to show the VCS name in context-menu entries.
 	"show_vcs_name": false,
 

@@ -38,13 +38,23 @@ class TortoiseCommand():
         if path == None:
             raise TortoiseError('Unable to run commands on an unsaved file.')
 
-        for create_vcs_func in [
-            lambda: TortoiseHg(Info.get('hg_hgtk_path'), path),
-            lambda: TortoiseGit(Info.get('git_tortoiseproc_path'), path),
-            lambda: TortoiseSVN(Info.get('svn_tortoiseproc_path'), path)
-        ]:
+        vcs_func_list = {
+            'hg' : lambda: TortoiseHg(Info.get('hg_hgtk_path'), path),
+            'git': lambda: TortoiseGit(Info.get('git_tortoiseproc_path'), path),
+            'svn': lambda: TortoiseSVN(Info.get('svn_tortoiseproc_path'), path)
+        }
+
+        load_vcs_list = Info.get('load_vcs_list', vcs_func_list.keys())
+        vcs_load_list = Util.get_filtered_list(vcs_func_list, load_vcs_list)
+
+        if not vcs_load_list:
+            raise TortoiseError(
+                'None of the values in the "load_vcs_list" setting is valid.\n' +
+                'Valid values are: %s.' % ', '.join(sorted(vcs_func_list.keys())))
+
+        for vcs_load_func in vcs_load_list:
             try:
-                result = create_vcs_func()
+                result = vcs_load_func()
                 break
             except (RepositoryNotFoundError):
                 pass
@@ -478,3 +488,15 @@ class Util:
         proc = Util.run_process(args, path, startupinfo)
 
         return proc.stdout.read().replace('\r\n', '\n').rstrip(' \n\r')
+
+    @staticmethod
+    def get_filtered_list(value, allowed):
+        allowed = Util.get_distinct_list(allowed)
+        return [value[x] for x in allowed if x in value] if allowed else []
+
+    @staticmethod
+    def get_distinct_list(value):
+        result = []
+        if value and type(value) is list:
+            map(lambda x: not x in result and result.append(x), value)
+        return result
