@@ -44,7 +44,7 @@ class TortoiseCommand():
             'svn': lambda: TortoiseSVN(Info.get('svn_tortoiseproc_path'), path)
         }
 
-        load_vcs_list = Info.get('load_vcs_list', vcs_func_list.keys())
+        load_vcs_list = Info.get('load_vcs_list', list(vcs_func_list))
         vcs_load_list = Util.get_filtered_list(vcs_func_list, load_vcs_list)
 
         if not vcs_load_list:
@@ -76,7 +76,7 @@ class TortoiseCommand():
             args = path if paths else None
         try:
             getattr(self.get_vcs(path), self.command_name)(args)
-        except (TortoiseError) as (exception):
+        except TortoiseError as exception:
             sublime.error_message('Tortoise: ' + str(exception))
 
     def is_visible(self, paths=None):
@@ -206,7 +206,7 @@ class TortoiseBase():
         if path in file_status_cache:
             if file_status_cache[path]['time'] > time.time():
                 if Info.get('debug'):
-                    print 'Fetching cached status for %s' % path
+                    print('Fetching cached status for %s' % path)
                 return file_status_cache[path]['status']
 
         if Info.get('debug'):
@@ -214,7 +214,7 @@ class TortoiseBase():
 
         try:
             status = self.new_vcs().check_status(path)
-        except (Exception) as (exception):
+        except Exception as exception:
             sublime.error_message(str(exception))
 
         file_status_cache[path] = {
@@ -223,8 +223,8 @@ class TortoiseBase():
         }
 
         if Info.get('debug'):
-            print 'Fetching status for %s in %s seconds' % \
-                (path, str(time.time() - start_time))
+            print('Fetching status for %s in %s seconds' % \
+                (path, str(time.time() - start_time)))
 
         return status
 
@@ -400,9 +400,13 @@ class Hg(CLI):
 
 
 class Info:
-    name = __name__
-    path = os.path.join(sublime.packages_path(), __name__)
-    get = sublime.load_settings('%s.sublime-settings' % __name__).get
+    name = __name__.split('.')[0] if (int(sublime.version()) > 3000) else __name__
+    path = os.path.join(sublime.packages_path(), name)
+
+    @staticmethod
+    def get(key, default = None):
+        settings = sublime.load_settings('%s.sublime-settings' % Info.name)
+        return settings.get(key, default)
 
 
 class Util:
@@ -487,7 +491,7 @@ class Util:
 
         proc = Util.run_process(args, path, startupinfo)
 
-        return proc.stdout.read().replace('\r\n', '\n').rstrip(' \n\r')
+        return proc.stdout.read().decode("utf-8").replace('\r\n', '\n').rstrip(' \n\r')
 
     @staticmethod
     def get_filtered_list(value, allowed):
@@ -496,7 +500,7 @@ class Util:
 
     @staticmethod
     def get_distinct_list(value):
-        result = []
         if value and type(value) is list:
-            map(lambda x: not x in result and result.append(x), value)
-        return result
+            seen = set()
+            return [x for x in value if x not in seen and not seen.add(x)]
+        return []
